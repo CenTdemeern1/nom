@@ -19,16 +19,26 @@ use crate::traits::{Input, ToUsize};
 /// }
 ///
 /// // Consumes 0 bits, returns 0
-/// assert_eq!(parser(([0b00010010].as_ref(), 0), 0), Ok((([0b00010010].as_ref(), 0), 0)));
+/// assert_eq!(parser(([0b0010_0001].as_ref(), 0), 0), Ok((([0b0010_0001].as_ref(), 0), 0)));
 ///
 /// // Consumes 4 bits, returns their values and increase offset to 4
-/// assert_eq!(parser(([0b00010010].as_ref(), 0), 4), Ok((([0b00010010].as_ref(), 4), 0b00000001)));
+/// assert_eq!(parser(([0b0010_0001].as_ref(), 0), 4), Ok((([0b0010_0001].as_ref(), 4), 0b0000_0001)));
 ///
 /// // Consumes 4 bits, offset is 4, returns their values and increase offset to 0 of next byte
-/// assert_eq!(parser(([0b00010010].as_ref(), 4), 4), Ok((([].as_ref(), 0), 0b00000010)));
+/// assert_eq!(parser(([0b0010_0001].as_ref(), 4), 4), Ok((([].as_ref(), 0), 0b0000_0010)));
 ///
 /// // Tries to consume 12 bits but only 8 are available
-/// assert_eq!(parser(([0b00010010].as_ref(), 0), 12), Err(nom::Err::Error(Error{input: ([0b00010010].as_ref(), 0), code: ErrorKind::Eof })));
+/// assert_eq!(parser(([0b0010_0001].as_ref(), 0), 12), Err(nom::Err::Error(Error{input: ([0b0010_0001].as_ref(), 0), code: ErrorKind::Eof })));
+///
+/// // If we want to take more than 8 bits, we need a bigger numer as our output
+/// fn parser_u16(input: (&[u8], usize), count: usize)-> IResult<(&[u8], usize), u16> {
+///  take(count)(input)
+/// }
+///
+/// // Take two sets of 12 bits
+/// let bits = [0b0010_0001, 0b0100_0011, 0b0110_0101].as_ref();
+/// assert_eq!(parser_u16((bits, 0), 12), Ok(((&bits[1..], 4), 0b0011_0010_0001)));
+/// assert_eq!(parser_u16((&bits[1..], 4), 12), Ok((([].as_ref(), 0), 0b0110_0101_0100)));
 /// ```
 pub fn take<I, O, C, E: ParseError<(I, usize)>>(
   count: C,
@@ -58,19 +68,23 @@ where
         if remaining == 0 {
           break;
         }
-        let val: O = if offset == 0 {
-          byte.into()
+        let byte = if offset == 0 { byte } else { byte >> offset };
+        let byte = if remaining < 8 {
+          let shift_offset = 8 - remaining;
+          // Clear upper 8-N bits so we're left with N bits
+          (byte << shift_offset) >> shift_offset
         } else {
-          ((byte << offset) >> offset).into()
+          byte
         };
+        let val: O = byte.into();
 
-        if remaining < 8 - offset {
-          acc += val >> (8 - offset - remaining);
+        let taken_without_truncation = 8 - offset;
+        acc += val << (count - remaining);
+        if remaining < taken_without_truncation {
           end_offset = remaining + offset;
           break;
         } else {
-          acc += val << (remaining - (8 - offset));
-          remaining -= 8 - offset;
+          remaining -= taken_without_truncation;
           offset = 0;
         }
       }
@@ -115,8 +129,8 @@ where
 ///     bool(input)
 /// }
 ///
-/// assert_eq!(parse(([0b10000000].as_ref(), 0)), Ok((([0b10000000].as_ref(), 1), true)));
-/// assert_eq!(parse(([0b10000000].as_ref(), 1)), Ok((([0b10000000].as_ref(), 2), false)));
+/// assert_eq!(parse(([0b00000001].as_ref(), 0)), Ok((([0b00000001].as_ref(), 1), true)));
+/// assert_eq!(parse(([0b00000001].as_ref(), 1)), Ok((([0b00000001].as_ref(), 2), false)));
 /// ```
 pub fn bool<I, E: ParseError<(I, usize)>>(input: (I, usize)) -> IResult<(I, usize), bool, E>
 where
@@ -132,19 +146,16 @@ mod test {
 
   #[test]
   fn test_take_0() {
-    let input = [0b00010010].as_ref();
-    let count = 0usize;
-    assert_eq!(count, 0usize);
-    let offset = 0usize;
+    let input = [0b0010_0001].as_ref();
 
-    let result: crate::IResult<(&[u8], usize), usize> = take(count)((input, offset));
+    let result: crate::IResult<(&[u8], usize), usize> = take(0usize)((input, 0));
 
-    assert_eq!(result, Ok(((input, offset), 0)));
+    assert_eq!(result, Ok(((input, 0), 0)));
   }
 
   #[test]
   fn test_take_eof() {
-    let input = [0b00010010].as_ref();
+    let input = [0b0010_0001].as_ref();
 
     let result: crate::IResult<(&[u8], usize), usize> = take(1usize)((input, 8));
 
@@ -159,19 +170,19 @@ mod test {
 
   #[test]
   fn test_take_span_over_multiple_bytes() {
-    let input = [0b00010010, 0b00110100, 0b11111111, 0b11111111].as_ref();
+    let input = [0b0010_0001, 0b0100_0011, 0b11111111, 0b11111111].as_ref();
 
     let result: crate::IResult<(&[u8], usize), usize> = take(24usize)((input, 4));
 
     assert_eq!(
       result,
-      Ok((([0b11111111].as_ref(), 4), 0b1000110100111111111111))
+      Ok((([0b11111111].as_ref(), 4), 0b1111_1111_1111_0100_0011_0010))
     );
   }
 
   #[test]
   fn test_bool_0() {
-    let input = [0b10000000].as_ref();
+    let input = [0b00000001].as_ref();
 
     let result: crate::IResult<(&[u8], usize), bool> = bool((input, 0));
 
@@ -180,7 +191,7 @@ mod test {
 
   #[test]
   fn test_bool_eof() {
-    let input = [0b10000000].as_ref();
+    let input = [0b00000001].as_ref();
 
     let result: crate::IResult<(&[u8], usize), bool> = bool((input, 8));
 
