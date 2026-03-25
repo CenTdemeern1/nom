@@ -250,6 +250,28 @@ impl<
   }
 }
 
+impl<
+    Input: Clone,
+    Output,
+    Error: ParseError<Input>,
+    A: Parser<Input, Output = Output, Error = Error>,
+  > Parser<Input> for Choice<Vec<A>>
+{
+  type Output = Output;
+  type Error = Error;
+
+  #[inline]
+  fn process<OM: crate::OutputMode>(
+    &mut self,
+    input: Input,
+  ) -> crate::PResult<OM, Input, Self::Output, Self::Error> {
+    Choice {
+      parser: self.parser.as_mut(),
+    }
+    .process::<OM>(input)
+  }
+}
+
 macro_rules! permutation_trait(
   (
     $name1:ident $ty1:ident $item1:ident
