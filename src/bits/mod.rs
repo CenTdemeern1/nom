@@ -33,8 +33,8 @@ use crate::Input;
 /// assert_eq!(remaining, [0xff, 0xff]);
 ///
 /// let parsed = output.1;
-/// assert_eq!(parsed.0, 0x01);
-/// assert_eq!(parsed.1, 0x23);
+/// assert_eq!(parsed.0, 0x02);
+/// assert_eq!(parsed.1, 0x41);
 /// ```
 pub fn bits<I, O, E1, E2, P>(mut parser: P) -> impl FnMut(I) -> IResult<I, O, E2>
 where
@@ -79,7 +79,7 @@ where
 ///
 /// let input = &[0x12, 0x34, 0xff, 0xff];
 ///
-/// assert_eq!(parse( input ), Ok(( &[][..], (0x01, 0x23, &[0xff, 0xff][..]) )));
+/// assert_eq!(parse( input ), Ok(( &[][..], (0x02, 0x41, &[0xff, 0xff][..]) )));
 /// ```
 pub fn bytes<I, O, E1, E2, P>(mut parser: P) -> impl FnMut((I, usize)) -> IResult<(I, usize), O, E2>
 where
@@ -130,9 +130,9 @@ mod test {
     assert_eq!(remaining, [0x56, 0x78]);
 
     let parsed = output.1;
-    assert_eq!(parsed.0, 0x01);
-    assert_eq!(parsed.1, 0x23);
-    assert_eq!(parsed.2, 0x04);
+    assert_eq!(parsed.0, 0x02);
+    assert_eq!(parsed.1, 0x41);
+    assert_eq!(parsed.2, 0x03);
   }
 
   #[test]
@@ -153,8 +153,8 @@ mod test {
     assert_eq!(remaining, [0x56, 0x78]);
 
     let parsed = output.1;
-    assert_eq!(parsed.0, 0x01);
-    assert_eq!(parsed.1, 0x23);
+    assert_eq!(parsed.0, 0x02);
+    assert_eq!(parsed.1, 0x41);
   }
 
   #[test]
